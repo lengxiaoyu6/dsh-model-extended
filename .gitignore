@@ -1,0 +1,11 @@
+# Dependencies — the peer links used for local testing resolve to the dsh
+# installation on this machine and are meaningless anywhere else.
+node_modules/
+
+# Editor-patch safety copies (created beside the patched dsh bundle, never here,
+# but ignored in case one lands in the tree).
+*.model-set.bak
+
+# Test scratch space
+test/.tmp/
+*.log

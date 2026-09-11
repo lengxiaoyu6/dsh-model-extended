@@ -1,0 +1,18 @@
+# model-set bundle patch: inserts the plugin into a profile's layer stack.
+#
+# Installed through the official CLI (`dsh plugin --profile <name> add model-set`),
+# the command reconciles `dsh.profile.bundles` against installed packages and,
+# seeing this declaration, appends `model-set` to the bundle stack. Profile boot
+# then merges this patch — a single `insert` of the plugin row.
+- insert:
+    - id: model-set
+      name: 'model-set'
+      config:
+        enabled: true
+        # Put the per-model fields into the Models editor on load. The editor
+        # bundle is backed up once beside itself before the first patch.
+        patchEditor: true
+        # Settings namespaces whose model rows carry the declarations. Each one
+        # must be a namespace that owns a `models` array.
+        namespaces:
+          - llm-deepseek
