@@ -49,12 +49,19 @@ dsh plugin --profile web add .
 dsh plugin --profile default add .
 ```
 
-不克隆也行，直接装压缩包：
+不克隆也行，直接装仓库：
 
 ```sh
-dsh plugin --profile web add https://github.com/lengxiaoyu6/dsh-model-extended/archive/refs/heads/main.zip
-dsh plugin --profile default add https://github.com/lengxiaoyu6/dsh-model-extended/archive/refs/heads/main.zip
+# Web
+dsh plugin --profile web add github:lengxiaoyu6/dsh-model-extended
+
+# 桌面
+dsh plugin --profile default add github:lengxiaoyu6/dsh-model-extended
 ```
+
+`git+https://github.com/lengxiaoyu6/dsh-model-extended.git` 也能装（注意用 `.tar.gz` 归档地址，`.zip` 会被 pnpm 当 tarball 解压而失败）。
+
+`dsh plugin add` 会把包装进 profile 的依赖，并把这个插件的 `cordis.patch.yml` 合进 bundle 栈，不用手改 profile 配置。
 
 装完重启 dsh，再刷新页面。
 
@@ -65,17 +72,16 @@ dsh plugin --profile default add https://github.com/lengxiaoyu6/dsh-model-extend
 插件不在运行时没人能撤销它打的补丁，所以先撤销，再移除：
 
 ```sh
-# 在克隆目录里
+# 从克隆目录
 node bin/dsh-model-extended.js revert
+
+# 或者从装了插件的 profile 里
+cd ~/.dsh/profiles/web && ./node_modules/.bin/dsh-model-extended revert
 
 dsh plugin --profile web remove dsh-model-extended
 ```
 
-`revert` 之后 bundle 与 dsh 原始文件逐字节一致，有测试守着这一点。撤销前也可以先看状态：
-
-```sh
-node bin/dsh-model-extended.js status
-```
+`revert` 之后 bundle 与 dsh 原始文件逐字节一致，有测试守着这一点。撤销前可以先看状态，把 `revert` 换成 `status` 即可。
 
 ## 数据格式
 
