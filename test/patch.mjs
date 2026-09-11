@@ -35,8 +35,13 @@ const locatedSource = fs.readFileSync(REAL_BUNDLE, "utf8");
 // already patched and its anchors are gone. Normalise back to the upstream text
 // first, so the sandbox always starts from the shape dsh actually ships.
 const realSource = locatedSource.includes(MARKER) ? unpatchSource(locatedSource) : locatedSource;
-check("the shipped editor text carries both anchors", realSource.includes(anchors.ANCHOR_CHILDREN) && realSource.includes(anchors.ANCHOR_DEFINITION));
-if (!realSource.includes(anchors.ANCHOR_CHILDREN)) {
+const hasAllAnchors = realSource.includes(anchors.DS_ANCHOR_CHILDREN)
+	&& realSource.includes(anchors.DS_ANCHOR_DEFINITION)
+	&& realSource.includes(anchors.ML_ANCHOR_CHILDREN)
+	&& realSource.includes(anchors.ML_ANCHOR_DEFINITION)
+	&& realSource.includes(anchors.SHARED_ANCHOR);
+check("the shipped editor text carries all five anchors", hasAllAnchors);
+if (!hasAllAnchors) {
 	console.log("\nCannot continue without the real anchors.");
 	process.exit(1);
 }
@@ -57,9 +62,11 @@ check("backup is byte-identical to the original", sha(sandbox + ".dsh-model-exte
 check("status reports patched", status().patched === true);
 
 const patched = fs.readFileSync(sandbox, "utf8");
-check("both row fields are wired into the disclosure", patched.includes("modelSetEfforts(model, index), modelSetModalities(model, index)"));
+check("DeepSeek row fields are wired into the disclosure", patched.includes("modelSetEfforts(model, index), modelSetModalities(model, index)"));
+check("ModelList row fields are wired into the disclosure", patched.includes("mlModelSetEfforts(model, index), mlModelSetModalities(model, index)"));
 check("injected block is present exactly once", patched.split(MARKER).length - 1 === 1, String(patched.split(MARKER).length - 1));
-check("the original disclosure anchor is gone", !patched.includes(anchors.ANCHOR_CHILDREN));
+check("the DeepSeek disclosure anchor is consumed", !patched.includes(anchors.DS_ANCHOR_CHILDREN));
+check("the ModelList disclosure anchor is consumed", !patched.includes(anchors.ML_ANCHOR_CHILDREN));
 
 // --- idempotence ------------------------------------------------------------
 const second = apply();
@@ -127,26 +134,44 @@ function selectOf(field) {
 	return last !== null && last !== undefined && last.type === "select" ? last : null;
 }
 
-/** Run the injected block the way the bundle's module scope would. */
-function makeRenderers() {
-	const injected = anchors.INSERTED_BLOCK;
+/** Run the injected blocks the way the bundle's module scope would. */
+function makeDsRenderers() {
+	const shared = anchors.SHARED_BLOCK;
+	const ds = anchors.DS_RENDERERS;
 	const factory = new Function(
 		"react_jsx_runtime",
 		"ModelsSection_module_css_default",
 		"props",
 		"update",
-		`${injected}
+		`${shared}
+		 ${ds}
 		 return { modelSetEfforts, modelSetModalities };`,
 	);
 	return (props, update) => factory(jsxRuntime, {}, props, update);
 }
 
+function makeMlRenderers() {
+	const shared = anchors.SHARED_BLOCK;
+	const ml = anchors.ML_RENDERERS;
+	const factory = new Function(
+		"react_jsx_runtime",
+		"ModelsSection_module_css_default",
+		"patch",
+		"disabled",
+		"t",
+		`${shared}
+		 ${ml}
+		 return { mlModelSetEfforts, mlModelSetModalities };`,
+	);
+	return (patch, disabled, t) => factory(jsxRuntime, {}, patch, disabled, t);
+}
+
 // English copy is chosen from the official label the page supplies.
 /** Render one row through the injected code and report its fields. */
-const renderers = makeRenderers();
+const dsRenderers = makeDsRenderers();
 function renderRow(model, disabled = false, t = (key) => key) {
 	const captured = [];
-	const api = renderers({ t, disabled }, (index, key, value) => captured.push({ index, key, value }));
+	const api = dsRenderers({ t, disabled }, (index, key, value) => captured.push({ index, key, value }));
 	return { efforts: api.modelSetEfforts(model, 3), modalities: api.modelSetModalities(model, 3), captured };
 }
 
@@ -239,14 +264,37 @@ check("labels stay English on an English page", enRows.efforts.props.children[0]
 const frozen = renderRow({ id: "m", inputModalities: ["text"], reasoningEfforts: ["low"] }, true);
 check("a disabled editor disables every chip", buttonsOf(frozen.modalities).every((c) => c.disabled) && buttonsOf(frozen.efforts).every((c) => c.disabled));
 
+// --- ModelListEditor renderers (use `patch` instead of `update`) ------------
+const mlRenderers = makeMlRenderers();
+function mlRenderRow(model, disabled = false, t = (key) => key) {
+	const captured = [];
+	const patchFn = (index, obj) => { for (const [k, v] of Object.entries(obj)) captured.push({ index, key: k, value: v }); };
+	const api = mlRenderers(patchFn, disabled, t);
+	return { efforts: api.mlModelSetEfforts(model, 3), modalities: api.mlModelSetModalities(model, 3), captured };
+}
+const mlBasic = mlRenderRow({ id: "m", reasoningEfforts: ["low", "high"], inputModalities: ["text"] });
+check("ML: declared range renders only those chips on", JSON.stringify(buttonsOf(mlBasic.efforts).slice(0, 4).map((c) => c.on)) === "[false,true,true,false]");
+check("ML: modalities render correctly", JSON.stringify(buttonsOf(mlBasic.modalities).map((c) => c.on)) === "[true,false]");
+buttonsOf(mlBasic.efforts)[0].onClick();
+check("ML: toggling an effort chip writes via patch", mlBasic.captured.some((c) => c.key === "reasoningEfforts" && JSON.stringify(c.value) === '["off","low","high"]'));
+buttonsOf(mlBasic.modalities)[1].onClick();
+check("ML: toggling a modality chip writes via patch", mlBasic.captured.some((c) => c.key === "inputModalities" && JSON.stringify(c.value) === '["text","image"]'));
+const mlDenied = mlRenderRow({ id: "m", reasoningEfforts: false });
+check("ML: denied model disables effort chips", buttonsOf(mlDenied.efforts).slice(0, 4).every((c) => c.disabled));
+const mlZh = mlRenderRow({ id: "m", reasoningEfforts: ["low"] }, false, (key) => (key === "modelContextWindow" ? "上下文窗口" : key));
+check("ML: labels localize from modelContextWindow key", mlZh.efforts.props.children[0].props.children === "思考强度范围", String(mlZh.efforts.props.children[0].props.children));
+
 // --- revert is exact --------------------------------------------------------
 const back = revert();
 check("revert reports reverted", back.ok === true && back.action === "reverted", JSON.stringify(back));
 check("revert restores the file byte-for-byte", sha(sandbox) === pristine, `${sha(sandbox).slice(0, 12)} vs ${pristine.slice(0, 12)}`);
 check("marker is gone after revert", !fs.readFileSync(sandbox, "utf8").includes(MARKER));
-check("revert restores the official disclosure anchor", fs.readFileSync(sandbox, "utf8").includes(anchors.ANCHOR_CHILDREN));
-// The official field renderer must survive: deleting it would break the page.
-check("revert restores the official field renderer", fs.readFileSync(sandbox, "utf8").includes(anchors.ANCHOR_DEFINITION));
+check("revert restores the DS disclosure anchor", fs.readFileSync(sandbox, "utf8").includes(anchors.DS_ANCHOR_CHILDREN));
+// The official field renderers must survive: deleting them would break the page.
+check("revert restores the DS field renderer", fs.readFileSync(sandbox, "utf8").includes(anchors.DS_ANCHOR_DEFINITION));
+check("revert restores the ML disclosure anchor", fs.readFileSync(sandbox, "utf8").includes(anchors.ML_ANCHOR_CHILDREN));
+check("revert restores the ML field definition", fs.readFileSync(sandbox, "utf8").includes(anchors.ML_ANCHOR_DEFINITION));
+check("revert restores the shared region boundary", fs.readFileSync(sandbox, "utf8").includes(anchors.SHARED_ANCHOR));
 let revertedSyntaxOk = true;
 let revertedSyntaxDetail = "";
 try {

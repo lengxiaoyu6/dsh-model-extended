@@ -13,6 +13,8 @@
         # bundle is backed up once beside itself before the first patch.
         patchEditor: true
         # Settings namespaces whose model rows carry the declarations. Each one
-        # must be a namespace that owns a `models` array.
+        # must be a namespace that owns a `models` array. An empty list means
+        # every configurable namespace is honoured.
         namespaces:
           - llm-deepseek
+          - llm-pi-ai
