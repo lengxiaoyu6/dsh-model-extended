@@ -1,7 +1,7 @@
-// model-set host-half verification: drives the wrapper against a fake LlmRuntime
+// dsh-model-extended host-half verification: drives the wrapper against a fake LlmRuntime
 // shaped like the real one (adapters Map + listConfigurableProviders + settings).
 // Every scenario gets its own context, so one case can never steer another.
-import { apply, name, inject } from "/root/code/dsh-plugin/model-set/lib/index.js";
+import { apply, name, inject } from "../lib/index.js";
 
 // The plugin patches the installed Models editor bundle on apply(). Tests must
 // never touch that installation, so every apply() below is redirected to a
@@ -10,13 +10,13 @@ import fsGuard from "node:fs";
 import osGuard from "node:os";
 import pathGuard from "node:path";
 const REAL_BUNDLE = "/root/.nvm/versions/node/v22.22.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js";
-const SANDBOX_DIR = fsGuard.mkdtempSync(pathGuard.join(osGuard.tmpdir(), "model-set-sandbox-"));
+const SANDBOX_DIR = fsGuard.mkdtempSync(pathGuard.join(osGuard.tmpdir(), "dsh-model-extended-sandbox-"));
 const SANDBOX_BUNDLE = pathGuard.join(SANDBOX_DIR, "client.js");
 if (fsGuard.existsSync(REAL_BUNDLE)) {
 	fsGuard.copyFileSync(REAL_BUNDLE, SANDBOX_BUNDLE);
-	process.env.MODEL_SET_CLIENT_BUNDLE = SANDBOX_BUNDLE;
+	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = SANDBOX_BUNDLE;
 } else {
-	process.env.MODEL_SET_CLIENT_BUNDLE = pathGuard.join(SANDBOX_DIR, "absent.js");
+	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = pathGuard.join(SANDBOX_DIR, "absent.js");
 }
 
 let failures = 0;
@@ -141,7 +141,7 @@ check("listModels carries declarations", listedFlash?.reasoning?.efforts?.length
 main.listeners.get("llm/adapters-updated")?.();
 main.listeners.get("llm/adapters-updated")?.();
 const twice = await resolve(main, "deepseek-v4-pro");
-check("repeated resync does not double-wrap", twice.reasoning.efforts.length === 4 && main.adapter.__modelSetWrapped === true);
+check("repeated resync does not double-wrap", twice.reasoning.efforts.length === 4 && main.adapter.__dshModelExtendedWrapped === true);
 
 // ------------------------------------------- an adapter registered later is caught
 const lateModels = [{ id: "late-model", name: "Late", reasoningEfforts: ["off"] }];
@@ -152,7 +152,7 @@ const lateHost = makeHost(lateModels, [
 const late = makeAdapter(lateModels);
 lateHost.ctx.llm.adapters.set("late-provider", late);
 lateHost.listeners.get("llm/adapters-updated")?.();
-check("late-registered adapter is wrapped", late.__modelSetWrapped === true);
+check("late-registered adapter is wrapped", late.__dshModelExtendedWrapped === true);
 const lateOut = await late.resolveModel("late-provider", "late-model");
 check("late adapter's declaration applies", JSON.stringify(lateOut.reasoning.efforts.map((e) => e.id)) === '["off"]');
 
@@ -181,7 +181,7 @@ const dCtx = {
 };
 apply(dCtx, { enabled: false });
 const dOut = await dAdapter.resolveModel("deepseek-official", "m2");
-check("disabled plugin does not wrap", dAdapter.__modelSetWrapped === undefined);
+check("disabled plugin does not wrap", dAdapter.__dshModelExtendedWrapped === undefined);
 check("disabled plugin leaves metadata alone", dOut.reasoning.efforts.length === 4);
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}  (name=${name}, inject=${JSON.stringify(inject)})`);

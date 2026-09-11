@@ -1,4 +1,4 @@
-// model-set end-to-end: the REAL @deepseek-ai/dsh-llm LlmRuntime, a fake adapter
+// dsh-model-extended end-to-end: the REAL @deepseek-ai/dsh-llm LlmRuntime, a fake adapter
 // shaped like dsh-llm-deepseek, and this plugin's wrapper in between. Proves the
 // overlaid metadata survives the runtime's own validation, and that a declared
 // range actually gates requested efforts before any provider I/O.
@@ -16,13 +16,13 @@ import fsGuard from "node:fs";
 import osGuard from "node:os";
 import pathGuard from "node:path";
 const REAL_BUNDLE = "/root/.nvm/versions/node/v22.22.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js";
-const SANDBOX_DIR = fsGuard.mkdtempSync(pathGuard.join(osGuard.tmpdir(), "model-set-sandbox-"));
+const SANDBOX_DIR = fsGuard.mkdtempSync(pathGuard.join(osGuard.tmpdir(), "dsh-model-extended-sandbox-"));
 const SANDBOX_BUNDLE = pathGuard.join(SANDBOX_DIR, "client.js");
 if (fsGuard.existsSync(REAL_BUNDLE)) {
 	fsGuard.copyFileSync(REAL_BUNDLE, SANDBOX_BUNDLE);
-	process.env.MODEL_SET_CLIENT_BUNDLE = SANDBOX_BUNDLE;
+	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = SANDBOX_BUNDLE;
 } else {
-	process.env.MODEL_SET_CLIENT_BUNDLE = pathGuard.join(SANDBOX_DIR, "absent.js");
+	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = pathGuard.join(SANDBOX_DIR, "absent.js");
 }
 
 let failures = 0;

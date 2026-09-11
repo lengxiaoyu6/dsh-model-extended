@@ -1,4 +1,4 @@
-// model-set patch verification.
+// dsh-model-extended patch verification.
 //
 // The editor patch edits a shipped file, so two things must hold: the edit is
 // exactly reversible, and the code it injects actually renders the right control
@@ -29,10 +29,10 @@ if (!hasRealAnchors) {
 	process.exit(1);
 }
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), "model-set-patch-"));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-model-extended-patch-"));
 const sandbox = path.join(dir, "client.js");
 fs.copyFileSync(REAL_BUNDLE, sandbox);
-process.env.MODEL_SET_CLIENT_BUNDLE = sandbox;
+process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = sandbox;
 
 const pristine = sha(sandbox);
 
@@ -40,8 +40,8 @@ const pristine = sha(sandbox);
 const first = apply();
 check("apply reports applied", first.ok === true && first.action === "applied", JSON.stringify(first));
 check("marker lands in the file", fs.readFileSync(sandbox, "utf8").includes(MARKER));
-check("a backup is taken", fs.existsSync(sandbox + ".model-set.bak"));
-check("backup is byte-identical to the original", sha(sandbox + ".model-set.bak") === pristine);
+check("a backup is taken", fs.existsSync(sandbox + ".dsh-model-extended.bak"));
+check("backup is byte-identical to the original", sha(sandbox + ".dsh-model-extended.bak") === pristine);
 check("status reports patched", status().patched === true);
 
 const patched = fs.readFileSync(sandbox, "utf8");
@@ -251,14 +251,14 @@ check("a second revert is a no-op", again.ok === true && again.action === "alrea
 // --- a bundle without the anchors is refused, not mangled -------------------
 const orphanFile = path.join(dir, "orphan.js");
 fs.writeFileSync(orphanFile, "window.__ModuleLoader__.load({});\n");
-process.env.MODEL_SET_CLIENT_BUNDLE = orphanFile;
+process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = orphanFile;
 const orphanBefore = sha(orphanFile);
 const refused = apply();
 check("a bundle without anchors is refused", refused.ok === false && refused.action === "anchor-not-found", JSON.stringify(refused));
 check("a refused apply leaves the file untouched", sha(orphanFile) === orphanBefore);
 
 // --- no bundle at all --------------------------------------------------------
-process.env.MODEL_SET_CLIENT_BUNDLE = path.join(dir, "does-not-exist.js");
+process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = path.join(dir, "does-not-exist.js");
 const missing = apply();
 check("a missing bundle is reported", missing.ok === false && missing.action === "not-found", JSON.stringify(missing));
 

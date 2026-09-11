@@ -4,7 +4,7 @@ node_modules/
 
 # Editor-patch safety copies (created beside the patched dsh bundle, never here,
 # but ignored in case one lands in the tree).
-*.model-set.bak
+*.dsh-model-extended.bak
 
 # Test scratch space
 test/.tmp/

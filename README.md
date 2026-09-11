@@ -1,4 +1,4 @@
-# model-set
+# dsh-model-extended
 
 在 dsh 的 **设置 → 模型目录** 里，直接给每一行模型设置它的**思考强度范围**与**支持的输入模态**。
 
@@ -27,7 +27,7 @@ dsh 原生的模型行只有 `模型 ID / 名称 / 上下文窗口 / 最大输�
 ## 安装
 
 ```bash
-dsh plugin --profile web add model-set@link:/root/code/dsh-plugin/model-set
+dsh plugin --profile web add dsh-model-extended@link:/root/code/dsh-plugin/dsh-model-extended
 ```
 
 `dsh plugin` 会把包加入 `dsh.profile.bundles`（本插件的 `cordis.patch.yml` 会被自动合并）。**重启 dsh 后生效**；重启后刷新页面即可看到新字段。
@@ -76,7 +76,7 @@ llm-deepseek:
 
 ## 安全与失败姿态
 
-- **改的是已安装的 dsh 文件**，所以补丁在写入前会在旁边留一份 `<bundle>.model-set.bak`（只留一次）
+- **改的是已安装的 dsh 文件**，所以补丁在写入前会在旁边留一份 `<bundle>.dsh-model-extended.bak`（只留一次）
 - 撤销不依赖备份：它是同样两个字面量的反向替换，因此升级覆盖备份后仍能撤销。撤销会把官方 `capacityField` 定义**还原**（而不是删掉），保证页面完整
 - 上游编辑器结构变了（锚点找不到）→ 报告并**保持文件原样**，结果是"没有这两个字段"，而不是白屏
 - 补丁的任何失败都不抛异常，绝不影响 dsh 启动

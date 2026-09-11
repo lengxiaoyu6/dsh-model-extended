@@ -1,12 +1,12 @@
-# model-set bundle patch: inserts the plugin into a profile's layer stack.
+# dsh-model-extended bundle patch: inserts the plugin into a profile's layer stack.
 #
-# Installed through the official CLI (`dsh plugin --profile <name> add model-set`),
+# Installed through the official CLI (`dsh plugin --profile <name> add dsh-model-extended`),
 # the command reconciles `dsh.profile.bundles` against installed packages and,
-# seeing this declaration, appends `model-set` to the bundle stack. Profile boot
+# seeing this declaration, appends `dsh-model-extended` to the bundle stack. Profile boot
 # then merges this patch — a single `insert` of the plugin row.
 - insert:
-    - id: model-set
-      name: 'model-set'
+    - id: dsh-model-extended
+      name: 'dsh-model-extended'
       config:
         enabled: true
         # Put the per-model fields into the Models editor on load. The editor

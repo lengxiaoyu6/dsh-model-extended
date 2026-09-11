@@ -1,5 +1,5 @@
 {
-  "name": "model-set",
+  "name": "dsh-model-extended",
   "version": "0.1.0",
   "description": "在 dsh 模型目录的每一行直接设置该模型的思考强度范围与支持的输入模态 (Per-model reasoning-effort range and accepted input modalities, right in the dsh Models catalog)",
   "type": "module",
@@ -17,6 +17,14 @@
     "README.md"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lengxiaoyu6/dsh-model-extended.git"
+  },
+  "homepage": "https://github.com/lengxiaoyu6/dsh-model-extended#readme",
+  "bugs": {
+    "url": "https://github.com/lengxiaoyu6/dsh-model-extended/issues"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",

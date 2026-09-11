@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# model-set: run every layer of the plugin's verification.
+# dsh-model-extended: run every layer of the plugin's verification.
 #
 #   ./test/run-all.sh
 #
