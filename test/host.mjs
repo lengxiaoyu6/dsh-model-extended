@@ -78,13 +78,15 @@ function makeAdapter(models) {
 }
 
 /** One isolated host: adapter, settings document, and its own topology listeners. */
-function makeHost(models, providers) {
+function makeHost(models, providers, document) {
 	const adapter = makeAdapter(models);
 	const writes = [];
 	const listeners = new Map();
+	// A live document: the settings UI rewrites it while the plugin is loaded.
+	const doc = document ?? { models: models.map((m) => ({ ...m })) };
 	const settings = {
 		writable: true,
-		get: (ns) => (ns === "llm-deepseek" ? { baseURL: "https://api.oaiapis.com/v1", models: models.map((m) => ({ ...m })) } : undefined),
+		get: (ns) => (ns === "llm-deepseek" ? { baseURL: "https://api.oaiapis.com/v1", models: doc.models } : undefined),
 		update: async (ns, patch) => { writes.push({ ns, patch }); },
 	};
 	const ctx = {
@@ -99,7 +101,7 @@ function makeHost(models, providers) {
 		},
 	};
 	apply(ctx, { enabled: true, namespaces: ["llm-deepseek"] });
-	return { ctx, adapter, settings, writes, listeners, models, providers };
+	return { ctx, adapter, settings, writes, listeners, models, providers, doc };
 }
 
 const resolve = (host, model) => host.adapter.resolveModel("deepseek-official", model);
@@ -156,6 +158,37 @@ main.listeners.get("llm/adapters-updated")?.();
 main.listeners.get("llm/adapters-updated")?.();
 const twice = await resolve(main, "deepseek-v4-pro");
 check("repeated resync does not double-wrap", twice.reasoning.efforts.length === 4 && main.adapter.__dshModelExtendedWrapped === true);
+
+// ------------------- a declaration written while the plugin runs takes effect at once
+// The settings UI writes declarations into a namespace the plugin is already
+// reading. Nothing re-registers an adapter when that happens, so a resolver that
+// captured its declarations at wrap time would keep serving the stale answer.
+const liveDoc = { models: [{ id: "m-live", name: "Live" }] };
+const live = makeHost([{ id: "m-live", name: "Live" }], undefined, liveDoc);
+const liveBefore = await resolve(live, "m-live");
+check("no declaration yet -> the adapter's full range shows", liveBefore.reasoning.efforts.length === 4, JSON.stringify(liveBefore.reasoning.efforts.map((e) => e.id)));
+
+liveDoc.models = [{ id: "m-live", name: "Live", reasoningEfforts: ["low"], inputModalities: ["text", "image"] }];
+const liveAfter = await resolve(live, "m-live");
+check("a range saved while running applies with no restart", JSON.stringify(liveAfter.reasoning.efforts.map((e) => e.id)) === '["low"]', JSON.stringify(liveAfter.reasoning.efforts.map((e) => e.id)));
+check("a modality saved while running applies too", JSON.stringify(liveAfter.inputModalities) === '["text","image"]', JSON.stringify(liveAfter.inputModalities));
+
+liveDoc.models = [{ id: "m-live", name: "Live", reasoningEfforts: false }];
+const liveDenied = await resolve(live, "m-live");
+check("denial saved while running applies too", liveDenied.reasoning === undefined);
+
+liveDoc.models = [{ id: "m-live", name: "Live" }];
+const liveCleared = await resolve(live, "m-live");
+check("clearing a declaration while running restores the adapter default", liveCleared.reasoning.efforts.length === 4, JSON.stringify(liveCleared.reasoning.efforts.map((e) => e.id)));
+
+// The selector renders from the session controller's catalog, which builds its
+// entries with `listModels` for identity and `resolveModelInfo` for reasoning.
+// Both views must agree with the live declaration.
+liveDoc.models = [{ id: "m-live", name: "Live", reasoningEfforts: ["low", "max"] }];
+const listedLive = (await live.adapter.listModels("deepseek-official")).find((m) => m.id === "m-live");
+check("listModels reflects a live declaration", JSON.stringify(listedLive?.reasoning?.efforts?.map((e) => e.id)) === '["low","max"]', JSON.stringify(listedLive?.reasoning?.efforts?.map((e) => e.id)));
+const resolvedLive = await resolve(live, "m-live");
+check("resolveModel agrees with listModels", JSON.stringify(resolvedLive.reasoning.efforts.map((e) => e.id)) === '["low","max"]', JSON.stringify(resolvedLive.reasoning.efforts.map((e) => e.id)));
 
 // ------------------------------------------- an adapter registered later is caught
 const lateModels = [{ id: "late-model", name: "Late", reasoningEfforts: ["off"] }];
