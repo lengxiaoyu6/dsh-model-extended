@@ -4,6 +4,9 @@
   "description": "在 dsh 模型目录的每一行直接设置该模型的思考强度范围与支持的输入模态 (Per-model reasoning-effort range and accepted input modalities, right in the dsh Models catalog)",
   "type": "module",
   "main": "lib/index.js",
+  "bin": {
+    "dsh-model-extended": "bin/dsh-model-extended.js"
+  },
   "exports": {
     ".": {
       "default": "./lib/index.js"
@@ -12,6 +15,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "bin",
     "lib",
     "cordis.patch.yml",
     "README.md"

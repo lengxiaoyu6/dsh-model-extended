@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { apply, revert, status, anchors, MARKER } from "../lib/patch.js";
+import { apply, revert, status, anchors, MARKER, locateBundle, unpatchSource } from "../lib/patch.js";
 
 let failures = 0;
 const check = (label, ok, detail) => {
@@ -20,18 +20,30 @@ const check = (label, ok, detail) => {
 const sha = (file) => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
 // --- a stand-in bundle carrying the real anchors, so this test owns its file ---
-const REAL_BUNDLE = "/root/.nvm/versions/node/v22.22.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js";
-const realSource = fs.readFileSync(REAL_BUNDLE, "utf8");
-const hasRealAnchors = realSource.includes(anchors.ANCHOR_CHILDREN) && realSource.includes(anchors.ANCHOR_DEFINITION);
-check("the shipped editor still carries both anchors", hasRealAnchors);
-if (!hasRealAnchors) {
+// The plugin locates the bundle wherever dsh is installed; the tests use the
+// same resolution instead of hardcoding a layout.
+const REAL_BUNDLE = locateBundle();
+if (REAL_BUNDLE === undefined) {
+	console.error("dsh installation not found, so there is no real Models editor bundle to patch.");
+	console.error("Install dsh, or point the lookup at one:");
+	console.error("  DSH_MODEL_EXTENDED_CLIENT_BUNDLE=/path/to/.../dsh-client-ui-settings-models/lib/client.js");
+	process.exit(1);
+}
+const locatedSource = fs.readFileSync(REAL_BUNDLE, "utf8");
+// The plugin may well be installed and active right now — that is its normal
+// state on a machine where it is in use — in which case the shipped bundle is
+// already patched and its anchors are gone. Normalise back to the upstream text
+// first, so the sandbox always starts from the shape dsh actually ships.
+const realSource = locatedSource.includes(MARKER) ? unpatchSource(locatedSource) : locatedSource;
+check("the shipped editor text carries both anchors", realSource.includes(anchors.ANCHOR_CHILDREN) && realSource.includes(anchors.ANCHOR_DEFINITION));
+if (!realSource.includes(anchors.ANCHOR_CHILDREN)) {
 	console.log("\nCannot continue without the real anchors.");
 	process.exit(1);
 }
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-model-extended-patch-"));
 const sandbox = path.join(dir, "client.js");
-fs.copyFileSync(REAL_BUNDLE, sandbox);
+fs.writeFileSync(sandbox, realSource);
 process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = sandbox;
 
 const pristine = sha(sandbox);

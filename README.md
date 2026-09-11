@@ -1,40 +1,85 @@
 # dsh-model-extended
 
-在 dsh 的 **设置 → 模型目录** 里，直接给每一行模型设置它的**思考强度范围**与**支持的输入模态**。
+给 dsh 模型目录里的每一行模型，单独设置它的思考强度范围和输入模态。
 
-dsh 原生的模型行只有 `模型 ID / 名称 / 上下文窗口 / 最大输出 token 数`，而思考强度（`reasoningEffort`）是**连接级**的全局开关 —— 一个端点上的所有模型共用同一组 `off | low | high | max`，哪怕某个模型实际只支持其中两档，或者根本不支持思考。这个插件把这两项能力交还给每一行模型自己。
+## 为什么需要
 
-## 它做了什么
+dsh 的模型行只有四项：模型 ID、名称、上下文窗口、最大输出 token 数。思考强度（`reasoningEffort`）不在行里，它是连接级的开关，同一个端点下的所有模型共用 `off / low / high / max` 四档。
 
-模型行展开后，除了官方的两个容量字段，还会多出两个字段：
+现实里这四档常常对不上：有的模型只支持其中两档，有的压根不支持思考，但界面照样给全套，选了之后要么被服务端拒掉，要么静默无效。输入模态同理，只能整条连接地配，没法在模型这一级区分。
+
+这个插件把这两项挪回模型行自己身上。
+
+## 界面
+
+展开任意一行模型，官方那两个容量字段旁边会多出两项：
 
 ```
 模型 ID                名称
-[deepseek-v4.1-flash] [DeepSeek-V41-Flash]        ⌄  🗑
+[deepseek-v4.1-flash] [DeepSeek-V41-Flash]          ⌄   🗑
 
-支持的输入       [文本] [图像]
-思考强度范围     [关闭] [低] [高] [最高] [不支持思考]  [跟随适配器 ▾]
+上下文窗口              最大输出 token 数
+[1M]                   [256K]
+支持的输入              [文本] [图像]
+思考强度范围            [关闭] [低] [高] [最高] [不支持思考]   [跟随适配器 ▾]
 ```
 
-- **支持的输入** —— 该模型接受的请求模态
-- **思考强度范围** —— 该模型真正支持的档位；再选一个其中的默认档，或"跟随适配器"
-- **不支持思考** —— 显式声明该模型没有思考能力
+**支持的输入** 勾选该模型接受的请求模态。
 
-没有做任何声明的模型，行为**完全不变**，一切仍由适配器决定。
+**思考强度范围** 勾选它真正支持的档位。勾了之后会多出一个下拉框选默认档，留空就是跟随适配器。
 
-声明不只是 UI。范围外的强度会在请求发出前被运行时拒绝（`UNSUPPORTED_REASONING_EFFORT`），输入模态则进入模型选择器与请求准备链路。
+**不支持思考** 显式声明该模型没有思考能力，此时上面的档位全部禁用。
+
+没动过的模型一律保持原样，仍然由适配器决定。
+
+这两项不只是界面上的字。范围外的强度会在请求发出前被运行时拒绝，报 `UNSUPPORTED_REASONING_EFFORT`；输入模态会进入模型选择器和请求准备流程。
 
 ## 安装
 
-```bash
-dsh plugin --profile web add dsh-model-extended@link:/root/code/dsh-plugin/dsh-model-extended
+需要本机已经装好 dsh。
+
+```sh
+git clone https://github.com/lengxiaoyu6/dsh-model-extended.git
+cd dsh-model-extended
+
+# Web
+dsh plugin --profile web add .
+
+# 桌面
+dsh plugin --profile default add .
 ```
 
-`dsh plugin` 会把包加入 `dsh.profile.bundles`（本插件的 `cordis.patch.yml` 会被自动合并）。**重启 dsh 后生效**；重启后刷新页面即可看到新字段。
+不克隆也行，直接装压缩包：
+
+```sh
+dsh plugin --profile web add https://github.com/lengxiaoyu6/dsh-model-extended/archive/refs/heads/main.zip
+dsh plugin --profile default add https://github.com/lengxiaoyu6/dsh-model-extended/archive/refs/heads/main.zip
+```
+
+装完重启 dsh，再刷新页面。
+
+第一次启动时插件会改动 dsh 内置的模型编辑器文件，改动前会在旁边留一份 `.dsh-model-extended.bak`。
+
+## 卸载
+
+插件不在运行时没人能撤销它打的补丁，所以先撤销，再移除：
+
+```sh
+# 在克隆目录里
+node bin/dsh-model-extended.js revert
+
+dsh plugin --profile web remove dsh-model-extended
+```
+
+`revert` 之后 bundle 与 dsh 原始文件逐字节一致，有测试守着这一点。撤销前也可以先看状态：
+
+```sh
+node bin/dsh-model-extended.js status
+```
 
 ## 数据格式
 
-声明是模型条目上的额外字段，随 `~/.dsh/settings.yaml` 一起存，用**官方保存按钮**保存：
+声明就是模型条目上的几个额外字段，跟其它设置一起存在 `~/.dsh/settings.yaml`，用模型设置页原本的保存按钮保存：
 
 ```yaml
 llm-deepseek:
@@ -44,65 +89,83 @@ llm-deepseek:
       contextWindow: 1000000
       inputModalities: [text, image]      # 支持的输入
       reasoningEfforts: [low, high]       # 思考强度范围
-      defaultReasoningEffort: high        # 默认档位（省略 = 跟随适配器）
+      defaultReasoningEffort: high        # 默认档位，可省略
     - id: deepseek-v4-flash
       reasoningEfforts: false             # 显式声明：该模型不支持思考
 ```
 
-三个字段都可选，也都可以直接手写：
+三个字段都是可选的，手写也完全可以：
 
-- `reasoningEfforts`：字符串数组 = 支持的档位；`false` = 显式不支持；缺省 = 交给适配器
-- `defaultReasoningEffort`：省略或不在范围内时，运行时保留适配器自己的默认
-- `inputModalities`：支持的输入；缺省 = 交给适配器
+- `reasoningEfforts`：字符串数组表示支持的档位；`false` 表示明确不支持思考；不写就交给适配器
+- `defaultReasoningEffort`：省略、或者不在范围内的值时，运行时保留适配器自己的默认
+- `inputModalities`：支持的输入；不写就交给适配器
 
-档位词汇沿用的是适配器自己的 `off | low | high | max`。范围外的值、未知模态在写入与读取两侧都会被规范化过滤，不会进入设置，也不会到达运行时。
+档位词汇沿用适配器自己的 `off / low / high / max`。范围外的档位和未知模态在写入和读取两侧都会被过滤掉，不会进设置，也不会到运行时。
 
-## 架构
+## 实现
 
-两件事，一个目标：让人**能填**，并且填的东西**算数**。
+要做成两件事：字段得能填，填了得算数。
 
-**字段从哪来。** dsh 没有提供模型行内部的外部扩展位 —— `settings.models.provider-card` 只能在供应商卡片**旁边**加区域，加不进模型**行**里，而官方 `DeepSeekModelsEditor` 只渲染 `id / name / contextWindow / maxTokens`。所以真正属于模型条目的字段，由 `lib/patch.js` 放进官方编辑器自己的 bundle 里：两个控件追加到每行的展开区，紧挨着官方那两个容量字段。
+**字段**。dsh 没有提供模型行内部的外部扩展位，`settings.models.provider-card` 只能加在供应商卡片旁边，加不进模型行；官方的 `DeepSeekModelsEditor` 也只渲染那四个字段。所以 `lib/patch.js` 直接把控件插进官方编辑器的 bundle：两个控件追加到每行的展开区，渲染函数声明在官方 `capacityField` 旁边。
 
-补丁刻意做得很小，因为官方编辑器已经把难的部分做完了：
+补丁只做很小的改动，因为官方编辑器已经把剩下的部分做好了：
 
-- `update(index, key, value)` 能把任意 key 写进草稿，`undefined` 即删除该 key —— 所以声明**搭上编辑器自己的草稿**、由**官方自己的保存路径**持久化，本插件不存任何东西
-- `DeepSeekModelDraft` 是 `Record<string, unknown>`，官方明确保持其开放以免编辑时丢字段 —— 所以额外字段能原样往返，无需改动任何官方代码
+- `update(index, key, value)` 能往草稿写任意 key，传 `undefined` 就是删掉它。声明因此搭上编辑器自己的草稿，由官方自己的保存路径落盘，插件不需要另外存任何东西。
+- `DeepSeekModelDraft` 的类型是 `Record<string, unknown>`，官方有意保持开放以免编辑时丢字段。额外字段能原样往返，不用改任何官方代码。
 
-两个插入点在随包发布的 bundle 里都是**唯一字符串**，所以补丁是两步字面替换：要么整体成功，要么拒绝并保持文件原样。插进 bundle 的代码只使用插入点本就可见的名字（`props`、`update`、`react_jsx_runtime`、`ModelsSection_module_css_default`），并与页面共用同一套主题变量与语言。
+两个插入点在发布的 bundle 里都是唯一字符串，所以补丁是两次字面替换，要么整体成功，要么拒绝并保持文件不动。插进去的代码只用插入点上本就可见的名字（`props`、`update`、`react_jsx_runtime`、`ModelsSection_module_css_default`），主题变量和语言也跟着页面走，所以它看起来就是官方的一部分。
 
-**声明如何生效。** `ctx.llm` 解析某个模型的确切元数据时，会调用该路由适配器的 `resolveModel`（`LlmRuntime.resolveModelInfoFor` → `registration.adapter.resolveModel`），而同一个调用也是请求发出前校验强度的依据。所以插件包装**已注册适配器实例**的 `resolveModel` 与 `listModels`，在适配器的答案之上叠加声明 —— 一个接缝，同时覆盖模型选择器与请求校验，且不克隆适配器。
+**生效**。`ctx.llm` 解析某个模型的确切元数据时，会调用该路由适配器的 `resolveModel`（`LlmRuntime.resolveModelInfoFor` → `registration.adapter.resolveModel`），请求发出前校验强度的也是同一个调用。所以插件包装已注册适配器实例的 `resolveModel` 和 `listModels`，在适配器的结果上叠加声明。一个接缝同时覆盖模型选择器和请求校验，也不用克隆适配器。
 
-适配器注册表 `ctx.llm.adapters` 存的是每条路由的 registration（`{adapter, provider, retryPolicy}`），不是适配器本身，插件据此解引用。适配器注册晚于插件加载，因此拓扑事件 `llm/adapters-updated` 每次都会重新扫描并包装（幂等，重复触发不会叠加包装）。路由→设置命名空间的映射来自适配器自己的目录声明，插件不硬编码任何 provider id。
+有一点值得记下来：`ctx.llm.adapters` 存的是每条路由的 registration（`{adapter, provider, retryPolicy}`），不是适配器本身，得往里解一层才是真正持有 `resolveModel` 的对象。
 
-## 安全与失败姿态
+适配器注册比插件加载晚，所以拓扑事件 `llm/adapters-updated` 每次都会重新扫描并包装，包装本身是幂等的。路由到设置命名空间的对应关系来自适配器自己的目录声明，插件不硬编码任何 provider id。
 
-- **改的是已安装的 dsh 文件**，所以补丁在写入前会在旁边留一份 `<bundle>.dsh-model-extended.bak`（只留一次）
-- 撤销不依赖备份：它是同样两个字面量的反向替换，因此升级覆盖备份后仍能撤销。撤销会把官方 `capacityField` 定义**还原**（而不是删掉），保证页面完整
-- 上游编辑器结构变了（锚点找不到）→ 报告并**保持文件原样**，结果是"没有这两个字段"，而不是白屏
-- 补丁的任何失败都不抛异常，绝不影响 dsh 启动
-- `config.patchEditor: false` 可整体关闭补丁，只保留叠加层
+## 失败时会怎样
 
-## 边界
+- 上游编辑器结构变了，锚点找不到：报告出来，文件保持原样。结果是"没有这两个字段"，不是白屏。
+- 补丁任何一步失败都不抛异常，不影响 dsh 启动。
+- 撤销不依赖备份文件，是同样两个字面量的反向替换，所以升级覆盖掉备份之后照样能撤销。撤销时会把官方 `capacityField` 的定义还原回去，而不是删掉。
+- `config.patchEditor: false` 可以整个关掉补丁，只留叠加层。
 
-- 只对**通过设置命名空间配置**的 provider 生效：声明存在 settings 段里，插件靠 `llm/listConfigurableProviders` 把路由映射到命名空间；没有这个映射的路由保持适配器原样
-- 默认只作用于 `llm-deepseek`；要在别的命名空间启用，改 `cordis.patch.yml` 里的 `config.namespaces`
-- 档位词汇目前是 DeepSeek 适配器的四档；适配器若引入新档位，需要同步 `EFFORT_LEVELS` 与 bundle 里的 `__msEffortIds`
+## 配置
+
+插件的 `cordis.patch.yml`：
+
+```yaml
+- insert:
+    - id: dsh-model-extended
+      name: 'dsh-model-extended'
+      config:
+        enabled: true
+        patchEditor: true
+        namespaces:
+          - llm-deepseek
+```
+
+`namespaces` 是允许承载这些声明的设置命名空间，每个都得是有 `models` 数组的命名空间。
+
+## 限制
+
+- 只对通过设置命名空间配置的 provider 生效。声明存在 settings 段里，插件靠 `llm/listConfigurableProviders` 把路由映射到命名空间；没有这个映射的路由保持适配器原样。
+- 默认只作用于 `llm-deepseek`，别的命名空间要自己加到 `namespaces` 里。
+- 档位词汇目前是 DeepSeek 适配器的四档。适配器以后加了新档位，`EFFORT_LEVELS` 和 bundle 里的 `__msEffortIds` 都要同步。
 
 ## 测试
 
-```bash
+```sh
 ./test/run-all.sh
 ```
 
-三层验证，共 102 项断言：
+需要本机装好 dsh：`test/e2e.mjs` 要拿 dsh 自己的 `LlmRuntime` 跑，`test/patch.mjs` 要拿 dsh 发布的模型编辑器 bundle 做补丁。`test/link-peers.mjs` 会从本机 dsh 里把这些解析出来，把 peer 链接建好；`node_modules/` 已 gitignore，新克隆需要这一步，`run-all.sh` 已经带上了。
 
-- `test/patch.mjs` — 编辑器补丁：应用、幂等、备份、**撤销的字节级可逆性**、补丁后与撤销后仍为合法 JS、锚点缺失时拒绝且不改文件；并把注入的渲染函数放进假 JSX 运行时**真的跑一遍** —— 档位/模态的选中态、点击写入草稿、默认档选择器、越界值忽略、中英文案、禁用态
-- `test/host.mjs` — 适配器叠加：范围生效、未声明不动、显式否定、非法值过滤、越界默认丢弃、拓扑重扫与幂等、无命名空间路由不受影响、禁用时零副作用
-- `test/e2e.mjs` — 接入**真实** `@deepseek-ai/dsh-llm` 运行时：叠加后的元数据通过运行时自己的校验，且范围外的强度被**真实拒绝**（`UNSUPPORTED_REASONING_EFFORT`）
+83 项断言，分三套：
 
-除 `patch.mjs` 在自己的沙箱副本上工作外，另两层测试也把补丁重定向到临时副本，**任何测试都不会改到 dsh 的安装**。
+- `test/patch.mjs`（52 项）：补丁的应用、幂等、备份、撤销的字节级可逆性、打完和撤销后仍是合法 JS、锚点缺失时拒绝且不改文件。另外把注入的渲染函数放进一个假的 JSX 运行时真跑一遍，检查档位和模态的选中态、点击写入草稿、默认档下拉、越界值被忽略、中英文案、禁用态。
+- `test/host.mjs`（19 项）：叠加层。范围生效、未声明不动、显式否定、非法值过滤、越界默认丢弃、拓扑重扫与幂等、没有命名空间的 provider 不受影响、插件禁用时零副作用。
+- `test/e2e.mjs`（12 项）：接真实的 `@deepseek-ai/dsh-llm` 运行时。叠加后的元数据要通过运行时自己的校验，范围外的强度要被真实拒绝。
 
-`test/e2e.mjs` 用 `node_modules/@deepseek-ai/` 下的 peer 链接解析 dsh 自己的包。
+除 `patch.mjs` 在自己的沙箱副本上工作外，另外两套也把补丁重定向到临时副本。任何测试都不会改到 dsh 的安装。
 
 ## 许可
 

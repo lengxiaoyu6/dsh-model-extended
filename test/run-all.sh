@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# dsh-model-extended: run every layer of the plugin's verification.
+# Runs every layer of the plugin's verification.
 #
 #   ./test/run-all.sh
 #
-# patch drives the editor patch (apply/idempotence/revert/injected renderers);
-# host drives the adapter overlay against a fake LlmRuntime; e2e drives the
-# overlay against the real @deepseek-ai/dsh-llm runtime.
+# Requires a local dsh installation: test/e2e.mjs drives the plugin against
+# dsh's own LlmRuntime, and test/patch.mjs patches a copy of the Models editor
+# bundle dsh ships. test/link-peers.mjs resolves both out of that install.
 #
-# host and e2e redirect the patch to a throwaway bundle copy, so nothing here
-# ever modifies the dsh installation. patch.mjs owns real apply/revert and works
-# on its own sandbox copy too.
+# Nothing here modifies the dsh installation. patch.mjs, host.mjs and e2e.mjs
+# all redirect the editor patch to a throwaway copy of the bundle.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +25,7 @@ run() {
 	echo
 }
 
+run "peer links" node "$here/link-peers.mjs"
 run "editor patch (apply / revert / injected fields)" node "$here/patch.mjs"
 run "adapter overlay (host half)" node "$here/host.mjs"
 run "end-to-end (real LlmRuntime)" node "$here/e2e.mjs"

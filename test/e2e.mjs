@@ -8,6 +8,7 @@
 import { Context } from "@deepseek-ai/cordis";
 import { LlmRuntime, LlmAdapter } from "@deepseek-ai/dsh-llm";
 import { apply } from "../lib/index.js";
+import { locateBundle, unpatchSource } from "../lib/patch.js";
 
 // The plugin patches the installed Models editor bundle on apply(). Tests must
 // never touch that installation, so every apply() below is redirected to a
@@ -15,14 +16,27 @@ import { apply } from "../lib/index.js";
 import fsGuard from "node:fs";
 import osGuard from "node:os";
 import pathGuard from "node:path";
-const REAL_BUNDLE = "/root/.nvm/versions/node/v22.22.2/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js";
 const SANDBOX_DIR = fsGuard.mkdtempSync(pathGuard.join(osGuard.tmpdir(), "dsh-model-extended-sandbox-"));
 const SANDBOX_BUNDLE = pathGuard.join(SANDBOX_DIR, "client.js");
-if (fsGuard.existsSync(REAL_BUNDLE)) {
-	fsGuard.copyFileSync(REAL_BUNDLE, SANDBOX_BUNDLE);
-	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = SANDBOX_BUNDLE;
-} else {
+// Sandboxes are scratch space; drop them when the run ends.
+process.on("exit", () => {
+	try {
+		fsGuard.rmSync(SANDBOX_DIR, { recursive: true, force: true });
+	} catch {
+		/* /tmp cleanup is best effort */
+	}
+});
+const REAL_BUNDLE = locateBundle();
+if (REAL_BUNDLE === undefined) {
+	// No dsh here: point the patch at a path that cannot exist, so it no-ops
+	// instead of reaching for a real installation.
 	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = pathGuard.join(SANDBOX_DIR, "absent.js");
+} else {
+	// This plugin may be active on this machine, in which case the live bundle
+	// already carries the patch; normalise to the upstream text either way.
+	const located = fsGuard.readFileSync(REAL_BUNDLE, "utf8");
+	fsGuard.writeFileSync(SANDBOX_BUNDLE, located.includes("dsh-model-extended:per-model-declarations") ? unpatchSource(located) : located);
+	process.env.DSH_MODEL_EXTENDED_CLIENT_BUNDLE = SANDBOX_BUNDLE;
 }
 
 let failures = 0;
