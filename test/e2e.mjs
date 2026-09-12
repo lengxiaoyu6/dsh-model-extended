@@ -161,5 +161,65 @@ try {
 }
 check("denied model refuses an explicit effort", deniedEffort !== undefined, deniedEffort === undefined ? "accepted (BAD)" : String(deniedEffort.message).slice(0, 90));
 
+// --- 4. what the custom-provider editor writes passes pi-ai's own schema --------
+// The DeepSeek editor's declarations are this plugin's invention, so only this
+// plugin can judge them. A pi-ai provider is the opposite: `reasoningEfforts`
+// and `input` are that adapter's own config fields, and it validates them
+// strictly. The ModelListEditor writes into that schema, so the shape it
+// produces is checked against the real thing here — an array of levels looks
+// perfectly reasonable and is refused outright.
+const { Config: PiAiConfig } = await import("@deepseek-ai/dsh-llm-pi-ai");
+
+/** Exactly the object the ModelListEditor builds for { off, low, high } + text. */
+const written = { off: null, low: "low", high: "high" };
+const piAiProfile = (reasoningEfforts, input) => ({
+	providers: {
+		kiro: {
+			displayName: "kiro",
+			apiKeyEnv: "KIRO_API_KEY",
+			api: "anthropic-messages",
+			baseURL: "https://example.invalid",
+			models: [{ id: "claude-opus-4-6", name: "claude-opus-4-6", reasoningEfforts, input }],
+		},
+	},
+});
+
+let dictAccepted;
+try {
+	dictAccepted = PiAiConfig(piAiProfile(written, ["text", "image"]));
+} catch (error) {
+	dictAccepted = undefined;
+	console.log(`   dict rejected: ${String(error.message).slice(0, 160)}`);
+}
+check("pi-ai accepts the dict the editor writes", dictAccepted !== undefined);
+check("the stored dict survives as written", JSON.stringify(dictAccepted?.providers?.kiro?.models?.[0]?.reasoningEfforts) === JSON.stringify(written), JSON.stringify(dictAccepted?.providers?.kiro?.models?.[0]?.reasoningEfforts));
+check("pi-ai keeps the modality list written to `input`", JSON.stringify(dictAccepted?.providers?.kiro?.models?.[0]?.input) === '["text","image"]', JSON.stringify(dictAccepted?.providers?.kiro?.models?.[0]?.input));
+
+// The guard is real: the array this editor used to write is refused, and
+// `inputModalities` — the DeepSeek field name — is not the field pi-ai reads.
+let arrayRefused;
+try {
+	PiAiConfig(piAiProfile(["off", "low", "high", "max"], ["text"]));
+} catch (error) {
+	arrayRefused = error;
+}
+check("pi-ai refuses the level array (the bug this guards)", arrayRefused !== undefined, arrayRefused === undefined ? "accepted (BAD)" : String(arrayRefused.message).slice(0, 90));
+
+const wrongField = PiAiConfig(piAiProfile(undefined, undefined));
+const wrongFieldModel = wrongField?.providers?.kiro?.models?.[0] ?? {};
+// The point is the field *name*: pi-ai reads `input`, so a declaration written
+// to `inputModalities` survives parsing as an unknown key and changes nothing.
+check("`inputModalities` is not a field pi-ai reads", wrongFieldModel.inputModalities === undefined && "input" in wrongFieldModel, JSON.stringify(Object.keys(wrongFieldModel)));
+
+// `false` is the denial the ModelListEditor writes for a non-reasoning model.
+let denialAccepted;
+try {
+	denialAccepted = PiAiConfig(piAiProfile(false, ["text"]));
+} catch (error) {
+	denialAccepted = undefined;
+	console.log(`   denial rejected: ${String(error.message).slice(0, 160)}`);
+}
+check("pi-ai accepts false for a non-reasoning model", denialAccepted?.providers?.kiro?.models?.[0]?.reasoningEfforts === false);
+
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

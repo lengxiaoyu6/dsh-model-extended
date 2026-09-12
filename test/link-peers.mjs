@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { locateBundle } from "../lib/patch.js";
 
 /** Packages the tests import from dsh rather than from this plugin. */
-const PEERS = ["@deepseek-ai/cordis", "@deepseek-ai/dsh-llm"];
+const PEERS = ["@deepseek-ai/cordis", "@deepseek-ai/dsh-llm", "@deepseek-ai/dsh-llm-pi-ai"];
 
 const here = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const scopeDir = path.join(here, "node_modules", "@deepseek-ai");
